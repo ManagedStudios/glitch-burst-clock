@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { HackathonHeader } from "@/components/HackathonHeader";
 import { CountdownTimer } from "@/components/CountdownTimer";
 
 export const Route = createFileRoute("/")({
@@ -16,14 +15,8 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <main className="relative min-h-screen px-4 py-8 sm:py-12">
-      <div className="mx-auto flex max-w-5xl flex-col gap-8">
-        <HackathonHeader />
-        <CountdownTimer />
-        <footer className="text-center label-mono opacity-70">
-          // SYSTEM READY · 60FPS · v1.0 //
-        </footer>
-      </div>
+    <main className="relative h-screen w-screen overflow-hidden">
+      <CountdownTimer />
     </main>
   );
 }

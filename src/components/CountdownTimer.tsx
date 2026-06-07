@@ -151,11 +151,11 @@ export function CountdownTimer() {
         >
           <ParticleCanvas burstTick={burstTick} />
           <div
-            className={`timer-digits ${digitStateClass} relative z-10 flex items-baseline gap-2 sm:gap-4 tabular-nums select-none`}
+            className={`timer-digits ${digitStateClass} relative z-10 flex items-baseline gap-2 sm:gap-4 tabular-nums select-none transition-all duration-300`}
           >
-            <span className="text-[30vw] leading-none">{m}</span>
-            <span className="text-[22vw] leading-none opacity-70">:</span>
-            <span className="text-[30vw] leading-none">{s}</span>
+            <span className={`${phase !== "normal" ? "text-[26vw]" : "text-[30vw]"} leading-none transition-all duration-300`}>{m}</span>
+            <span className={`${phase !== "normal" ? "text-[18vw]" : "text-[22vw]"} leading-none opacity-70 transition-all duration-300`}>:</span>
+            <span className={`${phase !== "normal" ? "text-[26vw]" : "text-[30vw]"} leading-none transition-all duration-300`}>{s}</span>
           </div>
         </div>
       </div>

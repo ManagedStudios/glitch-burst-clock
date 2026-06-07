@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParticleCanvas } from "./ParticleCanvas";
-import { Play, Pause, RotateCcw, Zap } from "lucide-react";
 
 type Phase = "idle" | "normal" | "warning" | "critical" | "done";
-
-const PRESETS = [
-  { label: "2 MIN", seconds: 120 },
-  { label: "1 MIN", seconds: 60 },
-  { label: "30 SEC", seconds: 30 },
-];
 
 function format(total: number) {
   const t = Math.max(0, total);
@@ -18,24 +11,29 @@ function format(total: number) {
 }
 
 export function CountdownTimer() {
-  const [duration, setDuration] = useState(120);
-  const [remainingMs, setRemainingMs] = useState(120_000);
+  const [duration, setDuration] = useState(60); // default 1 min
+  const [remainingMs, setRemainingMs] = useState(60_000);
   const [running, setRunning] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [burstTick, setBurstTick] = useState(0);
-  const lastSecondRef = useRef<number>(Math.ceil(120));
+  const lastSecondRef = useRef<number>(60);
   const endAtRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
+  const durationRef = useRef(duration);
+  const runningRef = useRef(running);
+
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { runningRef.current = running; }, [running]);
 
   const secondsLeft = Math.ceil(remainingMs / 1000);
   const { m, s } = format(secondsLeft);
 
   const phase: Phase = useMemo(() => {
-    if (secondsLeft <= 0 && running === false && remainingMs === 0) return "done";
+    if (secondsLeft <= 0 && !running) return "done";
     if (secondsLeft <= 10) return "critical";
     if (secondsLeft <= 30) return "warning";
     return "normal";
-  }, [secondsLeft, running, remainingMs]);
+  }, [secondsLeft, running]);
 
   const tick = useCallback(() => {
     if (endAtRef.current == null) return;
@@ -45,15 +43,19 @@ export function CountdownTimer() {
     if (curSec !== lastSecondRef.current) {
       const prev = lastSecondRef.current;
       lastSecondRef.current = curSec;
-      // critical seconds: shake + burst on every second change inside <=10
       if (curSec <= 10 && curSec >= 0 && prev > curSec) {
         setShakeKey((k) => k + 1);
         setBurstTick((b) => b + 1);
       }
     }
     if (left <= 0) {
+      // auto-reset to original duration, stop running
       setRunning(false);
       endAtRef.current = null;
+      setTimeout(() => {
+        setRemainingMs(durationRef.current * 1000);
+        lastSecondRef.current = durationRef.current;
+      }, 600);
       return;
     }
     rafRef.current = requestAnimationFrame(tick);
@@ -74,27 +76,45 @@ export function CountdownTimer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
 
-  const handleSelect = (sec: number) => {
+  const setMinutes = useCallback((mins: number) => {
+    const sec = mins * 60;
     setRunning(false);
     setDuration(sec);
     setRemainingMs(sec * 1000);
     lastSecondRef.current = sec;
     setBurstTick(0);
     setShakeKey(0);
-  };
+  }, []);
 
-  const handleReset = () => {
-    setRunning(false);
-    setRemainingMs(duration * 1000);
-    lastSecondRef.current = duration;
-    setBurstTick(0);
-    setShakeKey(0);
-  };
+  const toggle = useCallback(() => {
+    setRunning((r) => {
+      // if at 0, reset before starting
+      if (!r && remainingMs <= 0) {
+        const sec = durationRef.current;
+        setRemainingMs(sec * 1000);
+        lastSecondRef.current = sec;
+      }
+      return !r;
+    });
+  }, [remainingMs]);
 
-  const togglePlay = () => {
-    if (remainingMs <= 0) handleReset();
-    setRunning((r) => !r);
-  };
+  // Keyboard handling
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        toggle();
+        return;
+      }
+      if (e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        setMinutes(parseInt(e.key, 10));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggle, setMinutes]);
 
   const digitStateClass =
     phase === "warning" ? "state-warning" :
@@ -102,8 +122,7 @@ export function CountdownTimer() {
     "";
 
   return (
-    <section className="relative mx-auto w-full max-w-5xl">
-      {/* Warning grid backdrop */}
+    <section className="relative mx-auto w-full max-w-6xl">
       <div
         className={`pointer-events-none absolute inset-0 -z-10 tech-grid ${
           phase === "warning" || phase === "critical" ? "tech-grid-pulse" : ""
@@ -118,73 +137,49 @@ export function CountdownTimer() {
         {/* Status bar */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${running ? "bg-[color:var(--neon-cyan)]" : "bg-muted-foreground"}`}
-              style={running ? { boxShadow: "0 0 12px var(--neon-cyan)" } : undefined} />
+            <span
+              className={`h-2 w-2 rounded-full ${running ? "bg-[color:var(--neon-cyan)]" : "bg-muted-foreground"}`}
+              style={running ? { boxShadow: "0 0 12px var(--neon-cyan)" } : undefined}
+            />
             <span className="label-mono">
-              {running ? "Live // counting down" : phase === "done" ? "Sequence complete" : "Standby"}
+              {running
+                ? "Live // counting down"
+                : phase === "done"
+                ? "Sequence complete"
+                : "Standby // press SPACE"}
             </span>
           </div>
           <span className="label-mono hidden sm:inline">
-            T-Minus // {Math.floor(duration / 60).toString().padStart(2, "0")}:{(duration % 60).toString().padStart(2, "0")}
+            T-Minus // {Math.floor(duration / 60).toString().padStart(2, "0")}:
+            {(duration % 60).toString().padStart(2, "0")}
           </span>
         </div>
 
         {/* Timer */}
         <div
           key={shakeKey}
-          className={`relative flex items-center justify-center py-8 sm:py-14 ${shakeKey > 0 ? "shake" : ""}`}
+          className={`relative flex items-center justify-center py-10 sm:py-20 ${
+            shakeKey > 0 ? "shake" : ""
+          }`}
         >
           <ParticleCanvas burstTick={burstTick} />
-          <div className={`timer-digits ${digitStateClass} relative z-10 flex items-baseline gap-2 sm:gap-4 tabular-nums select-none`}>
-            <span className="text-[20vw] leading-none sm:text-[14rem]">{m}</span>
-            <span className="text-[14vw] leading-none opacity-70 sm:text-[10rem]">:</span>
-            <span className="text-[20vw] leading-none sm:text-[14rem]">{s}</span>
+          <div
+            className={`timer-digits ${digitStateClass} relative z-10 flex items-baseline gap-2 sm:gap-4 tabular-nums select-none`}
+          >
+            <span className="text-[24vw] leading-none sm:text-[18rem]">{m}</span>
+            <span className="text-[18vw] leading-none opacity-70 sm:text-[14rem]">:</span>
+            <span className="text-[24vw] leading-none sm:text-[18rem]">{s}</span>
           </div>
         </div>
 
-        {/* Controls */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          <button onClick={togglePlay} className="btn-neon primary">
-            {running ? <Pause size={16} /> : <Play size={16} />}
-            {running ? "Pause" : remainingMs <= 0 ? "Restart" : "Play"}
-          </button>
-          <button onClick={handleReset} className="btn-neon violet">
-            <RotateCcw size={16} /> Reset
-          </button>
-        </div>
-
-        {/* Presets + slider */}
-        <div className="mt-8 grid gap-6 sm:grid-cols-[1fr_auto]">
-          <div>
-            <div className="label-mono mb-2 flex items-center gap-2">
-              <Zap size={12} /> Quick select
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {PRESETS.map((p) => (
-                <button
-                  key={p.label}
-                  onClick={() => handleSelect(p.seconds)}
-                  className={`btn-neon ${duration === p.seconds ? "violet" : ""}`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="min-w-[240px]">
-            <div className="label-mono mb-2 flex items-center justify-between gap-4">
-              <span>Custom // {Math.floor(duration / 60)}m {duration % 60}s</span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={600}
-              step={5}
-              value={duration}
-              onChange={(e) => handleSelect(Number(e.target.value))}
-              className="cyber-slider"
-            />
-          </div>
+        {/* Keyboard legend */}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 label-mono opacity-80">
+          <span>
+            <kbd className="kbd">1</kbd>–<kbd className="kbd">9</kbd> · set minutes
+          </span>
+          <span>
+            <kbd className="kbd">SPACE</kbd> · {running ? "pause" : "start"}
+          </span>
         </div>
       </div>
     </section>

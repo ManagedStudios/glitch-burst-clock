@@ -21,6 +21,7 @@ export function CountdownTimer() {
   const rafRef = useRef<number | null>(null);
   const durationRef = useRef(duration);
   const runningRef = useRef(running);
+  const fullscreenRequestedRef = useRef(false);
 
   useEffect(() => { durationRef.current = duration; }, [duration]);
   useEffect(() => { runningRef.current = running; }, [running]);
@@ -34,6 +35,17 @@ export function CountdownTimer() {
     if (secondsLeft <= 30) return "warning";
     return "normal";
   }, [secondsLeft, running]);
+
+  const requestFullscreen = useCallback(() => {
+    if (fullscreenRequestedRef.current) return;
+    fullscreenRequestedRef.current = true;
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    } else if ((el as any).webkitRequestFullscreen) {
+      (el as any).webkitRequestFullscreen().catch(() => {});
+    }
+  }, []);
 
   const tick = useCallback(() => {
     if (endAtRef.current == null) return;
@@ -49,7 +61,6 @@ export function CountdownTimer() {
       }
     }
     if (left <= 0) {
-      // auto-reset to original duration, stop running
       setRunning(false);
       endAtRef.current = null;
       setTimeout(() => {
@@ -88,7 +99,6 @@ export function CountdownTimer() {
 
   const toggle = useCallback(() => {
     setRunning((r) => {
-      // if at 0, reset before starting
       if (!r && remainingMs <= 0) {
         const sec = durationRef.current;
         setRemainingMs(sec * 1000);
@@ -98,10 +108,13 @@ export function CountdownTimer() {
     });
   }, [remainingMs]);
 
-  // Keyboard handling
+  // Keyboard handling + fullscreen on first interaction
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      requestFullscreen();
+
       if (e.code === "Space") {
         e.preventDefault();
         toggle();
@@ -114,7 +127,7 @@ export function CountdownTimer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggle, setMinutes]);
+  }, [toggle, setMinutes, requestFullscreen]);
 
   const digitStateClass =
     phase === "warning" ? "state-warning" :
@@ -122,43 +135,17 @@ export function CountdownTimer() {
     "";
 
   return (
-    <section className="relative mx-auto w-full max-w-6xl">
+    <section className="relative h-screen w-screen">
       <div
         className={`pointer-events-none absolute inset-0 -z-10 tech-grid ${
           phase === "warning" || phase === "critical" ? "tech-grid-pulse" : ""
         }`}
       />
 
-      <div
-        className={`frame-panel scanlines relative overflow-hidden rounded-xl p-6 sm:p-10 ${
-          phase === "warning" || phase === "critical" ? "warning-flash" : ""
-        }`}
-      >
-        {/* Status bar */}
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span
-              className={`h-2 w-2 rounded-full ${running ? "bg-[color:var(--neon-cyan)]" : "bg-muted-foreground"}`}
-              style={running ? { boxShadow: "0 0 12px var(--neon-cyan)" } : undefined}
-            />
-            <span className="label-mono">
-              {running
-                ? "Live // counting down"
-                : phase === "done"
-                ? "Sequence complete"
-                : "Standby // press SPACE"}
-            </span>
-          </div>
-          <span className="label-mono hidden sm:inline">
-            T-Minus // {Math.floor(duration / 60).toString().padStart(2, "0")}:
-            {(duration % 60).toString().padStart(2, "0")}
-          </span>
-        </div>
-
-        {/* Timer */}
+      <div className="relative flex h-full w-full flex-col items-center justify-center overflow-hidden">
         <div
           key={shakeKey}
-          className={`relative flex items-center justify-center py-10 sm:py-20 ${
+          className={`relative flex items-center justify-center ${
             shakeKey > 0 ? "shake" : ""
           }`}
         >
@@ -166,20 +153,10 @@ export function CountdownTimer() {
           <div
             className={`timer-digits ${digitStateClass} relative z-10 flex items-baseline gap-2 sm:gap-4 tabular-nums select-none`}
           >
-            <span className="text-[24vw] leading-none sm:text-[18rem]">{m}</span>
-            <span className="text-[18vw] leading-none opacity-70 sm:text-[14rem]">:</span>
-            <span className="text-[24vw] leading-none sm:text-[18rem]">{s}</span>
+            <span className="text-[30vw] leading-none">{m}</span>
+            <span className="text-[22vw] leading-none opacity-70">:</span>
+            <span className="text-[30vw] leading-none">{s}</span>
           </div>
-        </div>
-
-        {/* Keyboard legend */}
-        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 label-mono opacity-80">
-          <span>
-            <kbd className="kbd">1</kbd>–<kbd className="kbd">9</kbd> · set minutes
-          </span>
-          <span>
-            <kbd className="kbd">SPACE</kbd> · {running ? "pause" : "start"}
-          </span>
         </div>
       </div>
     </section>
